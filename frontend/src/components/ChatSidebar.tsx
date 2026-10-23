@@ -18,7 +18,7 @@ export const ChatSidebar = ({ onBoardChanged }: ChatSidebarProps) => {
     setBusy(true);
     setError("");
     setDraft("");
-    const history = messages;
+    const history = messages.slice(-20);
     setMessages((current) => [...current, { role: "user", content: message }]);
     try {
       const result = await sendChatMessage(message, history);

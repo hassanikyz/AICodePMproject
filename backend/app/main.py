@@ -2,17 +2,19 @@ import secrets
 import time
 import os
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Path as PathParam, Request, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 
 from . import db
-from .ai import AIChatRequest, AIChatResponse, apply_actions
+from .ai import MAX_ID, AIChatRequest, AIChatResponse, Details, RowId, Title, apply_actions
 from .openrouter import OpenRouterError, check_connectivity, request_board_actions
 
 SESSION_COOKIE = "pm_session"
 SESSION_SECONDS = 8 * 60 * 60
+PathId = Annotated[int, PathParam(ge=1, le=MAX_ID)]
 
 
 class LoginCredentials(BaseModel):
@@ -21,7 +23,7 @@ class LoginCredentials(BaseModel):
 
 
 class TitleChange(BaseModel):
-    title: str
+    title: Title
 
     @field_validator("title")
     @classmethod
@@ -33,17 +35,17 @@ class TitleChange(BaseModel):
 
 
 class CardCreate(TitleChange):
-    column_id: int
-    details: str = ""
+    column_id: RowId
+    details: Details = ""
 
 
 class CardEdit(TitleChange):
-    details: str
+    details: Details
 
 
 class CardMove(BaseModel):
-    column_id: int
-    position: int
+    column_id: RowId
+    position: RowId
 
 
 def current_user(request: Request) -> int | None:
@@ -78,8 +80,8 @@ def create_app(static_dir: Path, database_path: Path) -> FastAPI:
     @app.post("/api/login")
     def login(credentials: LoginCredentials, response: Response) -> dict[str, bool]:
         if not (
-            secrets.compare_digest(credentials.username, "user")
-            and secrets.compare_digest(credentials.password, "password")
+            secrets.compare_digest(credentials.username.encode(), b"user")
+            and secrets.compare_digest(credentials.password.encode(), b"password")
         ):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         with db.connection(database_path) as conn:
@@ -150,7 +152,7 @@ def create_app(static_dir: Path, database_path: Path) -> FastAPI:
         return board_for(user_id)
 
     @app.patch("/api/columns/{column_id}")
-    def rename_column(column_id: int, change: TitleChange, user_id: int = Depends(require_user)) -> dict:
+    def rename_column(column_id: PathId, change: TitleChange, user_id: int = Depends(require_user)) -> dict:
         with db.connection(database_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
             board_id = db.ensure_board(conn, user_id)
@@ -177,7 +179,7 @@ def create_app(static_dir: Path, database_path: Path) -> FastAPI:
         return board_for(user_id)
 
     @app.patch("/api/cards/{card_id}")
-    def edit_card(card_id: int, change: CardEdit, user_id: int = Depends(require_user)) -> dict:
+    def edit_card(card_id: PathId, change: CardEdit, user_id: int = Depends(require_user)) -> dict:
         with db.connection(database_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
             board_id = db.ensure_board(conn, user_id)
@@ -190,7 +192,7 @@ def create_app(static_dir: Path, database_path: Path) -> FastAPI:
         return board_for(user_id)
 
     @app.delete("/api/cards/{card_id}")
-    def delete_card(card_id: int, user_id: int = Depends(require_user)) -> dict:
+    def delete_card(card_id: PathId, user_id: int = Depends(require_user)) -> dict:
         with db.connection(database_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
             board_id = db.ensure_board(conn, user_id)
@@ -202,7 +204,7 @@ def create_app(static_dir: Path, database_path: Path) -> FastAPI:
         return board_for(user_id)
 
     @app.post("/api/cards/{card_id}/move")
-    def move_card(card_id: int, move: CardMove, user_id: int = Depends(require_user)) -> dict:
+    def move_card(card_id: PathId, move: CardMove, user_id: int = Depends(require_user)) -> dict:
         with db.connection(database_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
             board_id = db.ensure_board(conn, user_id)

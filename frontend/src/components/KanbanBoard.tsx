@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -23,20 +23,23 @@ export const KanbanBoard = ({ onSessionExpired, refreshSignal = 0 }: { onSession
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadBoard = useCallback(async () => {
-    setError("");
-    try {
-      setBoard(await boardRequest("/api/board"));
-    } catch (failure) {
-      if (failure instanceof SessionExpired) onSessionExpired();
-      else setError("Could not load your board. Try again.");
-    }
-  }, [onSessionExpired]);
+  const [attempt, setAttempt] = useState(0);
 
-  useEffect(() => { void loadBoard(); }, [loadBoard]);
   useEffect(() => {
-    if (refreshSignal > 0) void loadBoard();
-  }, [loadBoard, refreshSignal]);
+    let active = true;
+    boardRequest("/api/board")
+      .then((loaded) => {
+        if (!active) return;
+        setBoard(loaded);
+        setError("");
+      })
+      .catch((failure) => {
+        if (!active) return;
+        if (failure instanceof SessionExpired) onSessionExpired();
+        else setError("Could not load your board. Try again.");
+      });
+    return () => { active = false; };
+  }, [onSessionExpired, refreshSignal, attempt]);
 
   const save = async (path: string, method: string, data?: object): Promise<boolean> => {
     if (saving) return false;
@@ -100,7 +103,7 @@ export const KanbanBoard = ({ onSessionExpired, refreshSignal = 0 }: { onSession
 
   if (!board) return (
     <main className="mx-auto max-w-[1500px] px-6 py-12">
-      {error ? <><p role="alert">{error}</p><button type="button" onClick={() => void loadBoard()}>Retry</button></> : <p role="status">Loading board...</p>}
+      {error ? <><p role="alert">{error}</p><button type="button" onClick={() => setAttempt((value) => value + 1)}>Retry</button></> : <p role="status">Loading board...</p>}
     </main>
   );
 

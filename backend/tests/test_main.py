@@ -52,6 +52,27 @@ def test_invalid_login(client: TestClient, username: str, password: str) -> None
     assert "password" not in response.text
 
 
+def test_non_ascii_credentials_are_rejected_not_crashed(client: TestClient) -> None:
+    for username, password in [("usér", "password"), ("user", "pässword")]:
+        response = client.post("/api/login", json={"username": username, "password": password})
+        assert response.status_code == 401
+
+
+def test_oversized_ids_and_text_are_rejected(client: TestClient) -> None:
+    sign_in(client)
+    huge = 2**63
+    assert client.patch(f"/api/cards/{huge}", json={"title": "a", "details": ""}).status_code == 422
+    assert client.delete(f"/api/cards/{huge}").status_code == 422
+    assert client.patch(f"/api/columns/{huge}", json={"title": "a"}).status_code == 422
+    assert client.post("/api/cards", json={"title": "a", "column_id": huge}).status_code == 422
+    assert client.post("/api/cards/1/move", json={"column_id": 1, "position": huge}).status_code == 422
+    assert client.post("/api/cards", json={"title": "a" * 201, "column_id": 1}).status_code == 422
+    assert client.post("/api/cards", json={"title": "a", "details": "d" * 5001, "column_id": 1}).status_code == 422
+    assert client.post("/api/ai/chat", json={"message": "m" * 4001}).status_code == 422
+    history = [{"role": "user", "content": "hi"}] * 51
+    assert client.post("/api/ai/chat", json={"message": "hi", "history": history}).status_code == 422
+
+
 def test_login_session_and_logout(client: TestClient) -> None:
     assert client.get("/api/session").json() == {"authenticated": False}
     cookie = client.post("/api/login", json={"username": "user", "password": "password"})

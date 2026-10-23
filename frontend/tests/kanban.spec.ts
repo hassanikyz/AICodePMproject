@@ -84,7 +84,9 @@ test("moves a card between columns", async ({ page }) => {
   await page.reload();
   const card = page.getByTestId(`card-${cardId}`);
   const targetColumn = page.getByTestId(`column-${targetId}`);
-  const cardBox = await card.getByRole("button", { name: `Drag ${title}` }).boundingBox();
+  const handle = card.getByRole("button", { name: `Drag ${title}` });
+  await handle.scrollIntoViewIfNeeded();
+  const cardBox = await handle.boundingBox();
   const columnBox = await targetColumn.boundingBox();
   if (!cardBox || !columnBox) {
     throw new Error("Unable to resolve drag coordinates.");
@@ -93,7 +95,7 @@ test("moves a card between columns", async ({ page }) => {
   try {
     await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(columnBox.x + columnBox.width / 2, columnBox.y + 120, { steps: 12 });
+    await page.mouse.move(columnBox.x + columnBox.width / 2, cardBox.y + cardBox.height / 2, { steps: 12 });
     await page.mouse.up();
     await expect(targetColumn.getByTestId(`card-${cardId}`)).toBeVisible();
     await page.reload();
@@ -168,12 +170,12 @@ test("chat creates, edits, moves, persists, and clears history on logout", async
       backlog.cards.forEach((item: { position: number }, index: number) => { item.position = index; });
       action = { action: "create", title: card.title, details: card.details, column_id: backlog.id, position: 0 };
     } else if (request.message.includes("edit")) {
-      const card = backlog.cards.find((item: { title: string }) => item.title === "AI created");
+      const card = backlog.cards.find((item: { title: string }) => item.title === "AI created")!;
       card.title = "AI edited";
       card.details = "Edited by AI";
       action = { action: "edit", card_id: card.id, title: card.title, details: card.details };
     } else {
-      const card = backlog.cards.find((item: { title: string }) => item.title === "AI edited");
+      const card = backlog.cards.find((item: { title: string }) => item.title === "AI edited")!;
       backlog.cards = backlog.cards.filter((item: { id: number }) => item.id !== card.id);
       backlog.cards.forEach((item: { position: number }, index: number) => { item.position = index; });
       card.position = done.cards.length;

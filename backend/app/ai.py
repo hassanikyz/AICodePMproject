@@ -4,20 +4,29 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from . import db
 
+MAX_ID = 2**63 - 1
+MAX_TITLE = 200
+MAX_DETAILS = 5000
+MAX_MESSAGE = 4000
+MAX_HISTORY = 50
+RowId = Annotated[int, Field(ge=0, le=MAX_ID)]
+Title = Annotated[str, Field(max_length=MAX_TITLE)]
+Details = Annotated[str, Field(max_length=MAX_DETAILS)]
+
 
 class AIMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=20 * MAX_MESSAGE)
 
 
 class CreateAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["create"]
-    title: str
-    details: str = ""
-    column_id: int
-    position: int | None = None
+    title: Title
+    details: Details = ""
+    column_id: RowId
+    position: RowId | None = None
 
     @field_validator("title")
     @classmethod
@@ -32,9 +41,9 @@ class EditAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["edit"]
-    card_id: int
-    title: str
-    details: str
+    card_id: RowId
+    title: Title
+    details: Details
 
     @field_validator("title")
     @classmethod
@@ -49,17 +58,17 @@ class MoveAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal["move"]
-    card_id: int
-    column_id: int
-    position: int
+    card_id: RowId
+    column_id: RowId
+    position: RowId
 
 
 AIAction = Annotated[CreateAction | EditAction | MoveAction, Field(discriminator="action")]
 
 
 class AIChatRequest(BaseModel):
-    message: str
-    history: list[AIMessage] = Field(default_factory=list)
+    message: str = Field(max_length=MAX_MESSAGE)
+    history: list[AIMessage] = Field(default_factory=list, max_length=MAX_HISTORY)
 
     @field_validator("message")
     @classmethod
