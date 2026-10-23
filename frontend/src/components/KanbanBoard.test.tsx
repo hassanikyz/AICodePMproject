@@ -1,46 +1,81 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, vi } from "vitest";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { apiBoard, boardReply } from "@/test/board";
 
-const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
+afterEach(() => vi.unstubAllGlobals());
 
-describe("KanbanBoard", () => {
-  it("renders five columns", () => {
-    render(<KanbanBoard />);
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
-  });
+const setup = async (replies: unknown[] = []) => {
+  const fetchMock = vi.fn().mockResolvedValueOnce(boardReply());
+  for (const reply of replies) fetchMock.mockResolvedValueOnce(reply);
+  vi.stubGlobal("fetch", fetchMock);
+  const onSessionExpired = vi.fn();
+  render(<KanbanBoard onSessionExpired={onSessionExpired} />);
+  expect(await screen.findByText("First task")).toBeInTheDocument();
+  return { fetchMock, onSessionExpired };
+};
 
-  it("renames a column", async () => {
-    render(<KanbanBoard />);
-    const column = getFirstColumn();
-    const input = within(column).getByLabelText("Column title");
-    await userEvent.clear(input);
-    await userEvent.type(input, "New Name");
-    expect(input).toHaveValue("New Name");
-  });
+const firstColumn = () => screen.getByTestId("column-1");
 
-  it("adds and removes a card", async () => {
-    render(<KanbanBoard />);
-    const column = getFirstColumn();
-    const addButton = within(column).getByRole("button", {
-      name: /add a card/i,
-    });
-    await userEvent.click(addButton);
+it("loads the five server columns and their cards", async () => {
+  await setup();
+  expect(screen.getAllByTestId(/column-\d+$/)).toHaveLength(5);
+  expect(screen.queryByText("Align roadmap themes")).not.toBeInTheDocument();
+});
 
-    const titleInput = within(column).getByPlaceholderText(/card title/i);
-    await userEvent.type(titleInput, "New card");
-    const detailsInput = within(column).getByPlaceholderText(/details/i);
-    await userEvent.type(detailsInput, "Notes");
+it("saves a column rename on blur", async () => {
+  const renamed = structuredClone(apiBoard);
+  renamed.columns[0].title = "Ideas";
+  const { fetchMock } = await setup([boardReply(renamed)]);
+  const input = within(firstColumn()).getByLabelText("Column title");
+  await userEvent.clear(input);
+  await userEvent.type(input, "Ideas");
+  await userEvent.tab();
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/columns/1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Ideas" }) })));
+  expect(input).toHaveValue("Ideas");
+});
 
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
+it("creates, edits and deletes a card using server responses", async () => {
+  const added = structuredClone(apiBoard);
+  added.columns[0].cards.push({ id: 13, title: "New card", details: "Notes", position: 2 });
+  const edited = structuredClone(added);
+  edited.columns[0].cards[2].title = "Updated card";
+  edited.columns[0].cards[2].details = "Updated notes";
+  const { fetchMock } = await setup([boardReply(added), boardReply(edited), boardReply(apiBoard)]);
+  await userEvent.click(within(firstColumn()).getByRole("button", { name: /add a card/i }));
+  await userEvent.type(within(firstColumn()).getByPlaceholderText("Card title"), "New card");
+  await userEvent.type(within(firstColumn()).getByPlaceholderText("Details"), "Notes");
+  await userEvent.click(within(firstColumn()).getByRole("button", { name: "Add card" }));
+  const card = await screen.findByTestId("card-13");
+  expect(fetchMock).toHaveBeenCalledWith("/api/cards", expect.objectContaining({ method: "POST" }));
+  await userEvent.click(within(card).getByRole("button", { name: "Edit New card" }));
+  await userEvent.clear(within(card).getByRole("textbox", { name: "Edit card title" }));
+  await userEvent.type(within(card).getByRole("textbox", { name: "Edit card title" }), "Updated card");
+  await userEvent.clear(within(card).getByRole("textbox", { name: "Edit card details" }));
+  await userEvent.type(within(card).getByRole("textbox", { name: "Edit card details" }), "Updated notes");
+  await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+  expect(await within(card).findByText("Updated card")).toBeInTheDocument();
+  await userEvent.click(within(card).getByRole("button", { name: "Delete Updated card" }));
+  await waitFor(() => expect(screen.queryByTestId("card-13")).not.toBeInTheDocument());
+  expect(fetchMock).toHaveBeenCalledWith("/api/cards/13", expect.objectContaining({ method: "DELETE" }));
+});
 
-    expect(within(column).getByText("New card")).toBeInTheDocument();
+it("keeps failed additions open and unchanged, with an error", async () => {
+  await setup([{ ok: false, status: 500 }]);
+  await userEvent.click(within(firstColumn()).getByRole("button", { name: /add a card/i }));
+  await userEvent.type(within(firstColumn()).getByPlaceholderText("Card title"), "Unsaved");
+  await userEvent.click(within(firstColumn()).getByRole("button", { name: "Add card" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Change was not saved");
+  expect(within(firstColumn()).getByPlaceholderText("Card title")).toHaveValue("Unsaved");
+  expect(screen.queryByText("Unsaved")).not.toBeInTheDocument();
+});
 
-    const deleteButton = within(column).getByRole("button", {
-      name: /delete new card/i,
-    });
-    await userEvent.click(deleteButton);
-
-    expect(within(column).queryByText("New card")).not.toBeInTheDocument();
-  });
+it("shows a load failure and retries", async () => {
+  const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false, status: 500 }).mockResolvedValueOnce(boardReply());
+  vi.stubGlobal("fetch", fetchMock);
+  render(<KanbanBoard onSessionExpired={vi.fn()} />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not load your board");
+  await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("First task")).toBeInTheDocument();
 });

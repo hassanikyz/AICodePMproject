@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Signed-in user's board response",
+  "description": "One board with exactly five ordered columns. The server derives the owner from the session; user IDs are never supplied by the client.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "columns"],
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "columns": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/column" }
+    }
+  },
+  "$defs": {
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "position", "cards"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "position": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "cards": { "type": "array", "items": { "$ref": "#/$defs/card" } }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "details", "position"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "details": { "type": "string" },
+        "position": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": 1,
+      "columns": [
+        { "id": 1, "title": "Backlog", "position": 0, "cards": [] },
+        { "id": 2, "title": "Discovery", "position": 1, "cards": [] },
+        { "id": 3, "title": "In Progress", "position": 2, "cards": [] },
+        { "id": 4, "title": "Review", "position": 3, "cards": [] },
+        { "id": 5, "title": "Done", "position": 4, "cards": [] }
+      ]
+    },
+    {
+      "id": 1,
+      "columns": [
+        { "id": 1, "title": "Ideas", "position": 0, "cards": [] },
+        { "id": 2, "title": "Discovery", "position": 1, "cards": [] },
+        { "id": 3, "title": "In Progress", "position": 2, "cards": [] },
+        { "id": 4, "title": "Review", "position": 3, "cards": [] },
+        { "id": 5, "title": "Done", "position": 4, "cards": [] }
+      ]
+    },
+    {
+      "id": 1,
+      "columns": [
+        { "id": 1, "title": "Backlog", "position": 0, "cards": [
+          { "id": 101, "title": "Draft brief", "details": "First pass", "position": 0 }
+        ] },
+        { "id": 2, "title": "Discovery", "position": 1, "cards": [] },
+        { "id": 3, "title": "In Progress", "position": 2, "cards": [] },
+        { "id": 4, "title": "Review", "position": 3, "cards": [
+          { "id": 102, "title": "Check copy", "details": "", "position": 0 }
+        ] },
+        { "id": 5, "title": "Done", "position": 4, "cards": [] }
+      ]
+    },
+    {
+      "id": 1,
+      "columns": [
+        { "id": 1, "title": "Backlog", "position": 0, "cards": [] },
+        { "id": 2, "title": "Discovery", "position": 1, "cards": [] },
+        { "id": 3, "title": "In Progress", "position": 2, "cards": [] },
+        { "id": 4, "title": "Review", "position": 3, "cards": [
+          { "id": 101, "title": "Draft brief", "details": "First pass", "position": 0 },
+          { "id": 102, "title": "Check copy", "details": "", "position": 1 }
+        ] },
+        { "id": 5, "title": "Done", "position": 4, "cards": [] }
+      ]
+    }
+  ]
+}
