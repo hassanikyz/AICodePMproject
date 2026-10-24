@@ -85,6 +85,7 @@ test("moves a card between columns", async ({ page }) => {
   const card = page.getByTestId(`card-${cardId}`);
   const targetColumn = page.getByTestId(`column-${targetId}`);
   const handle = card.getByRole("button", { name: `Drag ${title}` });
+  await targetColumn.scrollIntoViewIfNeeded();
   await handle.scrollIntoViewIfNeeded();
   const cardBox = await handle.boundingBox();
   const columnBox = await targetColumn.boundingBox();
@@ -119,7 +120,15 @@ test("reorders cards in one column and preserves the order", async ({ page }) =>
     await page.reload();
     const targetCard = page.getByTestId(`card-${secondId}`);
     const moveResponse = page.waitForResponse((response) => response.url().endsWith(`/api/cards/${firstId}/move`), { timeout: 10000 });
-    await page.getByTestId(`card-${firstId}`).getByRole("button", { name: `Drag ${firstTitle}` }).dragTo(targetCard);
+    const handle = page.getByTestId(`card-${firstId}`).getByRole("button", { name: `Drag ${firstTitle}` });
+    await handle.scrollIntoViewIfNeeded();
+    const from = await handle.boundingBox();
+    const to = await targetCard.boundingBox();
+    if (!from || !to) throw new Error("Unable to resolve drag coordinates.");
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+    await page.mouse.up();
     expect((await moveResponse).status()).toBe(200);
     await page.reload();
     const ids = await page.getByTestId(`column-${columnId}`).locator('[data-testid^="card-"]').evaluateAll((cards) => cards.map((card) => card.getAttribute("data-testid")));

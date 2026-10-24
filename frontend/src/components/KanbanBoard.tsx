@@ -161,7 +161,7 @@ export const KanbanBoard = ({ onSessionExpired, refreshSignal = 0 }: { onSession
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid min-w-0 gap-6 lg:grid-cols-[repeat(5,minmax(0,1fr))]">
+          <section className="grid min-w-0 gap-6 overflow-x-auto pb-4 lg:grid-cols-[repeat(5,minmax(260px,1fr))]">
             {board.columns.map((column) => (
               <KanbanColumn
                 key={column.id}
